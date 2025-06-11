@@ -1,0 +1,607 @@
+from sqlalchemy.orm import Session, joinedload, aliased
+from app.models.opus import Opus
+from app.models.user import User
+from app.models.bull import Bull
+from app.schemas.opus_schema import OpusCreate, OpusUpdate, OpusDetail
+from app.services import role_service
+from typing import List, Optional, Dict, Any
+from sqlalchemy import or_, func, and_, desc, distinct
+from fastapi import HTTPException, status
+from datetime import date
+import logging
+
+def get_opus(db: Session, opus_id: int, current_user: User = None) -> Optional[OpusDetail]:
+    """
+    Obtiene un registro de Opus por su ID.
+    - Los clientes solo pueden ver sus propios registros
+    - Los veterinarios y administradores pueden ver todos los registros
+    """
+    try:
+        opus = (
+            db.query(Opus)
+            .options(
+                joinedload(Opus.cliente),     # Relación válida
+                joinedload(Opus.donante),     # Relación válida
+                # No usar joinedload con Opus.toro si es una columna, no una relación
+            )
+            .filter(Opus.id == opus_id)
+            .first()
+        )
+
+        if not opus:
+            return None
+
+        # Verificación de permisos
+        if current_user and not (
+            role_service.is_admin(current_user) or role_service.is_veterinarian(current_user)
+        ):
+            if opus.cliente_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No tienes permiso para ver este registro"
+                )
+
+        return OpusDetail(
+            **opus.__dict__,
+            cliente_nombre=opus.cliente.full_name if opus.cliente else "",
+            donante_nombre=opus.donante.name if opus.donante else "",
+            toro_nombre=opus.toro  # Campo tipo string directamente del modelo
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener registro: {str(e)}"
+        )
+
+def get_opus_by_client(
+    db: Session,
+    client_id: Optional[int],
+    current_user: User = None,
+    skip: int = 0,
+    limit: int = 100
+) -> List[Dict[str, Any]]:
+    """
+    Obtiene todos los registros de Opus.
+    - Si es cliente, solo ve sus propios registros (ignora client_id)
+    - Si es veterinario o admin, puede ver registros de cualquier cliente
+    """
+    # Crear alias para las tablas de toros
+    donante_bull = aliased(Bull, name='donante_bull')
+    toro_bull = aliased(Bull, name='toro_bull')
+    
+    # Consulta base con joins
+    query = db.query(
+        Opus,
+        User.full_name.label('cliente_nombre'),
+        donante_bull.name.label('donante_nombre'),
+        func.coalesce(toro_bull.name, '').label('toro_nombre')
+    ).join(
+        User, Opus.cliente_id == User.id
+    ).outerjoin(
+        donante_bull, Opus.donante_id == donante_bull.id
+    ).outerjoin(
+        toro_bull, Opus.toro_id == toro_bull.id
+    )
+
+    # Aplicar filtros según el rol del usuario
+    if current_user:
+        if role_service.is_admin(current_user) or role_service.is_veterinarian(current_user):
+            # Admins y veterinarios pueden ver todos o filtrar por cliente_id
+            if client_id is not None:
+                query = query.filter(Opus.cliente_id == client_id)
+        else:
+            # Clientes solo ven sus propios registros
+            query = query.filter(Opus.cliente_id == current_user.id)
+    
+    # Aplicar paginación
+    query = query.order_by(Opus.fecha.desc()).offset(skip).limit(limit)
+    
+    try:
+        # Ejecutar consulta
+        results = query.all()
+        
+        # Formatear resultados
+        opus_list = []
+        for row in results:
+            opus = row[0]
+            opus_data = {
+                "id": opus.id,
+                "cliente_id": opus.cliente_id,
+                "cliente_nombre": row.cliente_nombre,
+                "donante_id": opus.donante_id,
+                "donante_nombre": row.donante_nombre,
+                "toro_id": opus.toro_id,
+                "toro_nombre": row.toro_nombre,
+                "fecha": opus.fecha,
+                "lugar": opus.lugar,
+                "finca": opus.finca,
+                "toro": opus.toro,
+                "gi": opus.gi,
+                "gii": opus.gii,
+                "giii": opus.giii,
+                "viables": opus.viables,
+                "otros": opus.otros,
+                "total_oocitos": opus.total_oocitos,
+                "ctv": opus.ctv,
+                "clivados": opus.clivados,
+                "porcentaje_cliv": opus.porcentaje_cliv,
+                "prevision": opus.prevision,
+                "porcentaje_prevision": opus.porcentaje_prevision,
+                "empaque": opus.empaque,
+                "porcentaje_empaque": opus.porcentaje_empaque,
+                "vt_dt": opus.vt_dt,
+                "porcentaje_vtdt": opus.porcentaje_vtdt,
+                "total_embriones": opus.total_embriones,
+                "porcentaje_total_embriones": opus.porcentaje_total_embriones,
+                "created_at": opus.created_at,
+                "updated_at": opus.updated_at
+            }
+            opus_list.append(opus_data)
+        
+        return opus_list
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error en get_opus_by_client: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener registros: {str(e)}"
+        )
+
+def create_opus(
+    db: Session,
+    opus: OpusCreate,
+    current_user: User
+) -> Dict[str, Any]:
+    """
+    Crea un nuevo registro de Opus.
+    Solo administradores y veterinarios pueden crear registros.
+    """
+    # Verificar que el usuario sea administrador o veterinario
+    if not (role_service.is_admin(current_user) or role_service.is_veterinarian(current_user)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo los administradores y veterinarios pueden crear registros de Opus"
+        )
+    
+    # Verificar que el cliente exista
+    client = db.query(User).filter(User.id == opus.cliente_id).first()
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cliente no encontrado"
+        )
+    
+    # Verificar que la vaca donante exista y pertenezca al cliente
+    donante = db.query(Bull).filter(
+        and_(
+            Bull.id == opus.donante_id,
+            Bull.user_id == opus.cliente_id
+        )
+    ).first()
+    if not donante:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vaca donante no encontrada o no pertenece al cliente especificado"
+        )
+
+    # Verificar que el toro exista y pertenezca al cliente
+    toro = db.query(Bull).filter(
+        and_(
+            Bull.id == opus.toro_id,
+            Bull.user_id == opus.cliente_id
+        )
+    ).first()
+    if not toro:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Toro no encontrado o no pertenece al cliente especificado"
+        )
+    
+    # Crear el nuevo registro
+    db_opus = Opus(**opus.dict())
+    
+    try:
+        db.add(db_opus)
+        db.commit()
+        db.refresh(db_opus)
+        
+        # Convertir el objeto SQLAlchemy a un diccionario con los campos necesarios
+        return {
+            "id": db_opus.id,
+            "cliente_id": db_opus.cliente_id,
+            "donante_id": db_opus.donante_id,
+            "toro_id": db_opus.toro_id,
+            "fecha": db_opus.fecha,
+            "lugar": db_opus.lugar,
+            "finca": db_opus.finca,
+            "toro": db_opus.toro,
+            "gi": db_opus.gi,
+            "gii": db_opus.gii,
+            "giii": db_opus.giii,
+            "viables": db_opus.viables,
+            "otros": db_opus.otros,
+            "total_oocitos": db_opus.total_oocitos,
+            "ctv": db_opus.ctv,
+            "clivados": db_opus.clivados,
+            "porcentaje_cliv": db_opus.porcentaje_cliv,
+            "prevision": db_opus.prevision,
+            "porcentaje_prevision": db_opus.porcentaje_prevision,
+            "empaque": db_opus.empaque,
+            "porcentaje_empaque": db_opus.porcentaje_empaque,
+            "vt_dt": db_opus.vt_dt,
+            "porcentaje_vtdt": db_opus.porcentaje_vtdt,
+            "total_embriones": db_opus.total_embriones,
+            "porcentaje_total_embriones": db_opus.porcentaje_total_embriones,
+            "created_at": db_opus.created_at,
+            "updated_at": db_opus.updated_at
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al crear el registro: {str(e)}"
+        )
+
+def update_opus(
+    db: Session,
+    opus_id: int,
+    opus: OpusUpdate,
+    current_user: User
+) -> Optional[Opus]:
+    """Actualiza un registro de Opus existente"""
+    # Obtener el registro existente
+    db_opus = get_opus(db, opus_id, current_user)
+    if not db_opus:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Registro no encontrado"
+        )
+    
+    # Verificar permisos
+    if not (role_service.is_admin(current_user) or role_service.is_veterinarian(current_user)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo los administradores y veterinarios pueden actualizar registros"
+        )
+    
+    # Si se está actualizando el toro_id, verificar que exista y pertenezca al cliente
+    if opus.toro_id is not None:
+        toro = db.query(Bull).filter(
+            and_(
+                Bull.id == opus.toro_id,
+                Bull.user_id == db_opus.cliente_id
+            )
+        ).first()
+        if not toro:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Toro no encontrado o no pertenece al cliente especificado"
+            )
+    
+    # Actualizar campos
+    update_data = opus.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_opus, key, value)
+    
+    try:
+        db.commit()
+        db.refresh(db_opus)
+        return db_opus
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al actualizar el registro: {str(e)}"
+        )
+
+def delete_opus(
+    db: Session,
+    opus_id: int,
+    current_user: User
+) -> bool:
+    """Elimina un registro de Opus"""
+    # Obtener el registro
+    db_opus = get_opus(db, opus_id, current_user)
+    if not db_opus:
+        return False
+    
+    # Verificar permisos
+    if not (role_service.is_admin(current_user) or role_service.is_veterinarian(current_user)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo los administradores y veterinarios pueden eliminar registros"
+        )
+    
+    try:
+        db.delete(db_opus)
+        db.commit()
+        return True
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al eliminar el registro: {str(e)}"
+        )
+
+def get_opus_grouped_by_date(
+    db: Session,
+    current_user: User,
+    skip: int = 0,
+    limit: int = 100
+) -> List[Dict[str, Any]]:
+    """Obtiene los registros de Opus agrupados por fecha"""
+    # Construir la consulta base
+    query = db.query(
+        Opus.fecha,
+        User.full_name.label('cliente_nombre'),
+        func.count(Opus.id).label('total_registros'),
+        func.sum(Opus.total_oocitos).label('total_oocitos'),
+        func.sum(Opus.total_embriones).label('total_embriones')
+    ).join(
+        User, Opus.cliente_id == User.id
+    )
+    
+    # Si no es admin ni veterinario, filtrar por cliente_id
+    if not (role_service.is_admin(current_user) or role_service.is_veterinarian(current_user)):
+        query = query.filter(Opus.cliente_id == current_user.id)
+    
+    # Agrupar y ordenar
+    query = query.group_by(
+        Opus.fecha,
+        User.full_name
+    ).order_by(
+        desc(Opus.fecha)
+    )
+    
+    # Aplicar paginación
+    query = query.offset(skip).limit(limit)
+    
+    # Ejecutar consulta
+    results = query.all()
+    
+    # Formatear resultados
+    summary_list = []
+    for row in results:
+        # Calcular porcentaje de éxito y promedio de embriones
+        porcentaje_exito = "0%" if row.total_oocitos == 0 else f"{(row.total_embriones / row.total_oocitos * 100):.2f}%"
+        promedio_embriones = "0" if row.total_registros == 0 else f"{(row.total_embriones / row.total_registros):.2f}"
+        
+        summary = {
+            "fecha": row.fecha,
+            "cliente_nombre": row.cliente_nombre,
+            "total_registros": row.total_registros,
+            "total_oocitos": row.total_oocitos,
+            "total_embriones": row.total_embriones,
+            "porcentaje_exito": porcentaje_exito,
+            "promedio_embriones": promedio_embriones
+        }
+        summary_list.append(summary)
+    
+    return summary_list
+
+def get_opus_admin_report(
+    db: Session,
+    current_user: User,
+    client_id: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    skip: int = 0,
+    limit: int = 100
+) -> Dict[str, Any]:
+    """
+    Obtiene un reporte de Opus filtrado por cliente y rango de fechas.
+    - Si es cliente, solo ve sus propias estadísticas (ignora client_id)
+    - Si es veterinario o admin, puede ver estadísticas de cualquier cliente
+    """
+    try:
+        # Crear alias para las tablas de toros
+        donante_bull = aliased(Bull, name='donante_bull')
+        toro_bull = aliased(Bull, name='toro_bull')
+        
+        # Consulta base para estadísticas
+        stats_query = db.query(
+            func.count(Opus.id).label('total_registros'),
+            func.sum(Opus.total_oocitos).label('total_oocitos'),
+            func.sum(Opus.total_embriones).label('total_embriones'),
+            func.avg(Opus.total_embriones).label('promedio_embriones'),
+            func.count(distinct(Opus.cliente_id)).label('total_clientes')
+        )
+        
+        # Consulta base para registros detallados
+        detail_query = db.query(
+            Opus,
+            User.full_name.label('cliente_nombre'),
+            donante_bull.name.label('donante_nombre'),
+            func.coalesce(toro_bull.name, '').label('toro_nombre')
+        ).join(
+            User, Opus.cliente_id == User.id
+        ).outerjoin(
+            donante_bull, Opus.donante_id == donante_bull.id
+        ).outerjoin(
+            toro_bull, Opus.toro_id == toro_bull.id
+        )
+        
+        # Aplicar filtros según el rol del usuario
+        if role_service.is_admin(current_user) or role_service.is_veterinarian(current_user):
+            # Admins y veterinarios pueden ver todos o filtrar por cliente_id
+            if client_id is not None:
+                stats_query = stats_query.filter(Opus.cliente_id == client_id)
+                detail_query = detail_query.filter(Opus.cliente_id == client_id)
+        else:
+            # Clientes solo ven sus propias estadísticas
+            stats_query = stats_query.filter(Opus.cliente_id == current_user.id)
+            detail_query = detail_query.filter(Opus.cliente_id == current_user.id)
+        
+        # Aplicar filtros de fecha si se proporcionan
+        if start_date and end_date:
+            stats_query = stats_query.filter(Opus.fecha.between(start_date, end_date))
+            detail_query = detail_query.filter(Opus.fecha.between(start_date, end_date))
+        elif start_date:
+            stats_query = stats_query.filter(Opus.fecha >= start_date)
+            detail_query = detail_query.filter(Opus.fecha >= start_date)
+        elif end_date:
+            stats_query = stats_query.filter(Opus.fecha <= end_date)
+            detail_query = detail_query.filter(Opus.fecha <= end_date)
+        
+        # Obtener estadísticas
+        stats = stats_query.first()
+        
+        # Obtener registros detallados con paginación
+        detail_query = detail_query.order_by(Opus.fecha.desc()).offset(skip).limit(limit)
+        details = detail_query.all()
+        
+        # Formatear registros detallados
+        registros = []
+        for row in details:
+            opus = row[0]
+            registros.append({
+                "id": opus.id,
+                "cliente_id": opus.cliente_id,
+                "cliente_nombre": row.cliente_nombre,
+                "donante_id": opus.donante_id,
+                "donante_nombre": row.donante_nombre,
+                "toro_id": opus.toro_id,
+                "lugar": opus.lugar,
+                "finca": opus.finca,
+                "toro_nombre": row.toro_nombre,
+                "fecha": opus.fecha,
+                "toro": opus.toro,
+                "gi": opus.gi,
+                "gii": opus.gii,
+                "giii": opus.giii,
+                "viables": opus.viables,
+                "otros": opus.otros,
+                "total_oocitos": opus.total_oocitos,
+                "ctv": opus.ctv,
+                "clivados": opus.clivados,
+                "porcentaje_cliv": opus.porcentaje_cliv,
+                "prevision": opus.prevision,
+                "porcentaje_prevision": opus.porcentaje_prevision,
+                "empaque": opus.empaque,
+                "porcentaje_empaque": opus.porcentaje_empaque,
+                "vt_dt": opus.vt_dt,
+                "porcentaje_vtdt": opus.porcentaje_vtdt,
+                "total_embriones": opus.total_embriones,
+                "porcentaje_total_embriones": opus.porcentaje_total_embriones
+            })
+        
+        # Calcular porcentajes y promedios
+        total_oocitos = stats.total_oocitos or 0
+        total_embriones = stats.total_embriones or 0
+        porcentaje_exito = "0%" if total_oocitos == 0 else f"{(total_embriones / total_oocitos * 100):.2f}%"
+        
+        # Construir respuesta
+        return {
+            "estadisticas": {
+                "total_registros": stats.total_registros or 0,
+                "total_clientes": stats.total_clientes or 0,
+                "total_oocitos": total_oocitos,
+                "total_embriones": total_embriones,
+                "porcentaje_exito": porcentaje_exito,
+                "promedio_embriones_por_registro": f"{stats.promedio_embriones:.2f}" if stats.promedio_embriones else "0"
+            },
+            "registros": registros
+        }
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error en get_opus_admin_report: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener reporte: {str(e)}"
+        )
+
+def get_opus_by_date_for_client(
+    db: Session,
+    fecha: date,
+    current_user: User
+) -> List[Dict[str, Any]]:
+    """
+    Obtiene todos los registros de Opus de una fecha específica para un cliente,
+    incluyendo la información de sus bovinos (donante y toro).
+    Solo accesible para el propio cliente.
+    """
+    logger = logging.getLogger(__name__)
+    logger.info(f"Buscando registros para la fecha: {fecha} y cliente_id: {current_user.id}")
+    
+    try:
+        # Crear alias para las tablas de toros
+        donante_bull = aliased(Bull, name='donante_bull')
+        toro_bull = aliased(Bull, name='toro_bull')
+        
+        # Construir la consulta base con joins
+        query = db.query(
+            Opus,
+            User.full_name.label('cliente_nombre'),
+            donante_bull.name.label('donante_nombre'),
+            toro_bull.name.label('toro_nombre'),
+        ).join(
+            User, Opus.cliente_id == User.id
+        ).outerjoin(
+            donante_bull, Opus.donante_id == donante_bull.id
+        ).outerjoin(
+            toro_bull, Opus.toro_id == toro_bull.id
+        ).filter(
+            Opus.cliente_id == current_user.id,
+            func.date(Opus.fecha) == fecha
+        )
+        
+        # Ejecutar la consulta y obtener resultados
+        results = query.all()
+        logger.info(f"Registros encontrados: {len(results)}")
+        
+        # Si no hay resultados, verificar si hay registros para esa fecha
+        if not results:
+            # Consulta de verificación
+            fecha_check = db.query(Opus.fecha).distinct().all()
+            fechas_disponibles = [f.fecha for f in fecha_check]
+            logger.info(f"No se encontraron registros para la fecha {fecha}.")
+            logger.info(f"Fechas disponibles en la base de datos: {fechas_disponibles}")
+            return []
+        
+        # Formatear resultados
+        opus_list = []
+        for row in results:
+            opus = row[0]
+            opus_data = {
+                "id": opus.id,
+                "cliente_id": opus.cliente_id,
+                "cliente_nombre": row.cliente_nombre,
+                "donante_id": opus.donante_id,
+                "donante_nombre": row.donante_nombre,
+                "toro_id": opus.toro_id,
+                "toro_nombre": row.toro_nombre,
+                "fecha": opus.fecha,
+                "lugar": opus.lugar,
+                "finca": opus.finca,
+                "toro": opus.toro,
+                "gi": opus.gi,
+                "gii": opus.gii,
+                "giii": opus.giii,
+                "viables": opus.viables,
+                "otros": opus.otros,
+                "total_oocitos": opus.total_oocitos,
+                "ctv": opus.ctv,
+                "clivados": opus.clivados,
+                "porcentaje_cliv": opus.porcentaje_cliv,
+                "prevision": opus.prevision,
+                "porcentaje_prevision": opus.porcentaje_prevision,
+                "empaque": opus.empaque,
+                "porcentaje_empaque": opus.porcentaje_empaque,
+                "vt_dt": opus.vt_dt,
+                "porcentaje_vtdt": opus.porcentaje_vtdt,
+                "total_embriones": opus.total_embriones,
+                "porcentaje_total_embriones": opus.porcentaje_total_embriones,
+                "created_at": opus.created_at,
+                "updated_at": opus.updated_at
+            }
+            opus_list.append(opus_data)
+            logger.info(f"Procesado registro ID: {opus.id} para fecha: {opus.fecha}")
+        
+        return opus_list
+    except Exception as e:
+        logger.error(f"Error en get_opus_by_date_for_client: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener registros por fecha: {str(e)}"
+        ) 
