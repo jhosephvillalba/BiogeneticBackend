@@ -106,8 +106,8 @@ def seed_admin_user(db):
         # Crear el usuario
         admin_user = User(**admin_data)
         db.add(admin_user)
-            db.commit()
-            logger.info(f"Creado usuario administrador: {admin_data['email']}")
+        db.commit()
+        logger.info(f"Creado usuario administrador: {admin_data['email']}")
     else:
         logger.info(f"El usuario administrador {admin_data['email']} ya existe")
 
@@ -131,8 +131,8 @@ def seed_regular_user(db):
         # Crear el usuario
         regular_user = User(**user_data)
         db.add(regular_user)
-            db.commit()
-            logger.info(f"Creado usuario regular: {user_data['email']}")
+        db.commit()
+        logger.info(f"Creado usuario regular: {user_data['email']}")
     else:
         logger.info(f"El usuario regular {user_data['email']} ya existe")
 
@@ -156,8 +156,8 @@ def seed_client_user(db):
         # Crear el usuario
         client_user = User(**client_data)
         db.add(client_user)
-            db.commit()
-            logger.info(f"Creado usuario cliente: {client_data['email']}")
+        db.commit()
+        logger.info(f"Creado usuario cliente: {client_data['email']}")
     else:
         logger.info(f"El usuario cliente {client_data['email']} ya existe")
 

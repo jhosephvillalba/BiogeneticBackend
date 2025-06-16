@@ -69,6 +69,106 @@ async def read_bulls(
             detail=f"Error al obtener toros: {str(e)}"
         )
 
+@router.get("/my-bulls", response_model=List[BullSchema])
+async def read_my_bulls(
+    request: Request,
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token)
+):
+    """Obtiene los toros del usuario autenticado"""
+    try:
+        bulls = bull_service.get_bulls_by_user(db, user_id=current_user.id, skip=skip, limit=limit)
+        
+        # Convertir cada toro a esquema, ignorando los que no se puedan convertir
+        bull_schemas = []
+        for bull in bulls:
+            try:
+                schema = BullSchema.from_orm(bull)
+                if schema:
+                    bull_schemas.append(schema)
+            except Exception as e:
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error al convertir toro {bull.id} a esquema: {str(e)}")
+                # Continuar con el siguiente toro
+        
+        return bull_schemas
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error al obtener toros del usuario: {str(e)}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener toros del usuario: {str(e)}"
+        )
+
+@router.get("/filter", response_model=List[BullSchema])
+async def filter_bulls(
+    request: Request,
+    search_query: str = None,
+    name: str = None,
+    register: str = None,
+    race_id: int = None,
+    sex_id: int = None,
+    status: BullStatus = None,
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token)
+):
+    """
+    Filtra toros por diversos criterios.
+    
+    Parámetros:
+    - search_query: Búsqueda general (nombre del toro, registro, documento del cliente, nombre del cliente)
+    - name: Filtrar específicamente por nombre del toro (coincidencia parcial)
+    - register: Filtrar específicamente por número de registro del toro (coincidencia parcial)
+    - race_id: ID de la raza
+    - sex_id: ID del sexo
+    - status: Estado del toro (active/inactive)
+    
+    Restricciones de acceso:
+    - Los usuarios normales solo pueden ver sus propios toros
+    - Los administradores pueden ver todos los toros
+    """
+    try:
+        bulls = bull_service.filter_bulls(
+            db, 
+            current_user=current_user, 
+            search_query=search_query,
+            name=name,
+            register=register,
+            race_id=race_id,
+            sex_id=sex_id,
+            status=status,
+            skip=skip, 
+            limit=limit
+        )
+        
+        # Convertir cada toro a esquema, ignorando los que no se puedan convertir
+        bull_schemas = []
+        for bull in bulls:
+            try:
+                schema = BullSchema.from_orm(bull)
+                if schema:
+                    bull_schemas.append(schema)
+            except Exception as e:
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error al convertir toro {bull.id} a esquema: {str(e)}")
+                # Continuar con el siguiente toro
+        
+        return bull_schemas
+    except Exception as e:
+        # Registrar el error
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error al filtrar toros: {str(e)}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al filtrar toros: {str(e)}"
+        )
+
 @router.get("/{bull_id}", response_model=BullSchema)
 async def read_bull(
     bull_id: int,
@@ -261,105 +361,6 @@ async def read_bulls_by_sex(
             detail=f"Error al obtener toros por sexo: {str(e)}"
         )
 
-@router.get("/my-bulls", response_model=List[BullSchema])
-async def read_my_bulls(
-    request: Request,
-    skip: int = 0, 
-    limit: int = 100, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_from_token)
-):
-    """Obtiene los toros del usuario autenticado"""
-    try:
-        bulls = bull_service.get_bulls_by_user(db, user_id=current_user.id, skip=skip, limit=limit)
-        
-        # Convertir cada toro a esquema, ignorando los que no se puedan convertir
-        bull_schemas = []
-        for bull in bulls:
-            try:
-                schema = BullSchema.from_orm(bull)
-                if schema:
-                    bull_schemas.append(schema)
-            except Exception as e:
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error al convertir toro {bull.id} a esquema: {str(e)}")
-                # Continuar con el siguiente toro
-        
-        return bull_schemas
-    except Exception as e:
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error al obtener toros del usuario: {str(e)}")
-        
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al obtener toros del usuario: {str(e)}"
-        )
-
-@router.get("/filter", response_model=List[BullSchema])
-async def filter_bulls(
-    request: Request,
-    search_query: str = None,
-    name: str = None,
-    register: str = None,
-    race_id: int = None,
-    sex_id: int = None,
-    status: BullStatus = None,
-    skip: int = 0, 
-    limit: int = 100, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_from_token)
-):
-    """
-    Filtra toros por diversos criterios.
-    
-    Parámetros:
-    - search_query: Búsqueda general (nombre del toro, registro, documento del cliente, nombre del cliente)
-    - name: Filtrar específicamente por nombre del toro (coincidencia parcial)
-    - register: Filtrar específicamente por número de registro del toro (coincidencia parcial)
-    - race_id: ID de la raza
-    - sex_id: ID del sexo
-    - status: Estado del toro (active/inactive)
-    
-    Restricciones de acceso:
-    - Los usuarios normales solo pueden ver sus propios toros
-    - Los administradores pueden ver todos los toros
-    """
-    try:
-        bulls = bull_service.filter_bulls(
-            db, 
-            current_user=current_user, 
-            search_query=search_query,
-            name=name,
-            register=register,
-            race_id=race_id,
-            sex_id=sex_id,
-            status=status,
-            skip=skip, 
-            limit=limit
-        )
-        
-        # Convertir cada toro a esquema, ignorando los que no se puedan convertir
-        bull_schemas = []
-        for bull in bulls:
-            try:
-                schema = BullSchema.from_orm(bull)
-                if schema:
-                    bull_schemas.append(schema)
-            except Exception as e:
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error al convertir toro {bull.id} a esquema: {str(e)}")
-                # Continuar con el siguiente toro
-        
-        return bull_schemas
-    except Exception as e:
-        # Registrar el error
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error al filtrar toros: {str(e)}")
-        
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al filtrar toros: {str(e)}"
-        )
 
 @router.post("/client/{client_id}", response_model=BullSchema, status_code=status.HTTP_201_CREATED)
 async def create_bull_for_client(

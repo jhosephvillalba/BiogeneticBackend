@@ -12,6 +12,8 @@ class OpusBase(BaseModel):
     toro: str
     lugar: Optional[str]
     finca: Optional[str]
+    race: Optional[str]
+    donante_code: Optional[str]
 
     gi: int = Field(ge=0)
     gii: int = Field(ge=0)
@@ -44,6 +46,8 @@ class OpusUpdate(BaseModel):
     toro_id: Optional[int] = None
     lugar: Optional[str] = None
     finca: Optional[str] = None
+    race: Optional[str] = None
+    donante_code: Optional[str] = None
 
     gi: Optional[int] = Field(default=None, ge=0)
     gii: Optional[int] = Field(default=None, ge=0)

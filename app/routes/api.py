@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.routes import auth, users, bulls, races, sexes, roles, opus, inputs, outputs
+from app.routes import auth, users, bulls, races, sexes, roles, opus, inputs, outputs, produccion_embrionaria
 
 router = APIRouter(
     prefix="/api",
@@ -16,6 +16,7 @@ router.include_router(roles.router)
 router.include_router(opus.router)
 router.include_router(inputs.router)
 router.include_router(outputs.router)
+router.include_router(produccion_embrionaria.router)
 
 @router.get("/status")
 async def status():

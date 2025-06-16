@@ -6,3 +6,4 @@ from app.services.bull_service import *
 from app.services.race_service import *
 from app.services.sex_service import *
 from app.services.input_service import * 
+from app.services.produccion_embrionaria_service import * 

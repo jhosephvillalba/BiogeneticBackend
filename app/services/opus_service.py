@@ -116,6 +116,8 @@ def get_opus_by_client(
                 "fecha": opus.fecha,
                 "lugar": opus.lugar,
                 "finca": opus.finca,
+                "donante_code": opus.donante_code,
+                "race": opus.race,
                 "toro": opus.toro,
                 "gi": opus.gi,
                 "gii": opus.gii,
@@ -246,30 +248,41 @@ def create_opus(
 def update_opus(
     db: Session,
     opus_id: int,
-    opus: OpusUpdate,
+    opus_data: OpusUpdate,
     current_user: User
-) -> Optional[Opus]:
-    """Actualiza un registro de Opus existente"""
-    # Obtener el registro existente
-    db_opus = get_opus(db, opus_id, current_user)
+) -> OpusDetail:
+    """
+    Actualiza un registro de Opus sin depender de ninguna otra función.
+    """
+    # Obtener directamente el registro sin usar get_opus
+    db_opus = (
+        db.query(Opus)
+        .options(
+            joinedload(Opus.cliente),
+            joinedload(Opus.donante)
+        )
+        .filter(Opus.id == opus_id)
+        .first()
+    )
+
     if not db_opus:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Registro no encontrado"
         )
-    
+
     # Verificar permisos
     if not (role_service.is_admin(current_user) or role_service.is_veterinarian(current_user)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Solo los administradores y veterinarios pueden actualizar registros"
         )
-    
-    # Si se está actualizando el toro_id, verificar que exista y pertenezca al cliente
-    if opus.toro_id is not None:
+
+    # Validar toro si se está cambiando
+    if opus_data.toro_id is not None:
         toro = db.query(Bull).filter(
             and_(
-                Bull.id == opus.toro_id,
+                Bull.id == opus_data.toro_id,
                 Bull.user_id == db_opus.cliente_id
             )
         ).first()
@@ -278,16 +291,22 @@ def update_opus(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Toro no encontrado o no pertenece al cliente especificado"
             )
-    
-    # Actualizar campos
-    update_data = opus.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_opus, key, value)
-    
+
+    # Aplicar actualizaciones
+    update_fields = opus_data.dict(exclude_unset=True)
+    for field, value in update_fields.items():
+        setattr(db_opus, field, value)
+
     try:
         db.commit()
         db.refresh(db_opus)
-        return db_opus
+
+        return OpusDetail(
+            **db_opus.__dict__,
+            cliente_nombre=db_opus.cliente.full_name if db_opus.cliente else "",
+            donante_nombre=db_opus.donante.name if db_opus.donante else "",
+            toro_nombre=db_opus.toro
+        )
     except Exception as e:
         db.rollback()
         raise HTTPException(

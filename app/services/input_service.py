@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation, getcontext
 from app.models.input_output import Input, InputStatus, Output
 from app.models.bull import Bull, Race
 from app.models.user import User
@@ -294,85 +295,262 @@ def create_input(db: Session, input_data: InputCreate, user_id: int, current_use
             detail=f"Error al crear el input: {str(e)}"
         )
 
-def update_input(db: Session, input_id: int, input_data: InputUpdate, user_id: int, current_user: Optional[User] = None) -> Optional[Input]:
-    """
-    Actualiza un input existente.
-    Verifica que el input pertenezca al usuario que lo actualiza.
-    Verifica que quantity_taken no exceda quantity_received.
-    """
-    # Obtener el input
+# Configurar precisión decimal
+getcontext().prec = 10  # Suficiente para manejar ml con precisión
+
+logger = logging.getLogger(__name__)
+
+def is_approximately_equal(a: float, b: float, tolerance: float = 1e-6) -> bool:
+    """Compara dos floats con una tolerancia para evitar errores de redondeo"""
+    return abs(a - b) <= tolerance
+
+def safe_decimal(value: float) -> Decimal:
+    """Convierte un float a Decimal de manera segura evitando errores de precisión"""
+    return Decimal(str(value))
+
+# def update_input(db: Session, input_id: int, input_data: InputUpdate, user_id: int, 
+#                 current_user: Optional[User] = None) -> Optional[Input]:
+#     """
+#     Actualiza un input existente con manejo seguro de decimales.
+    
+#     Args:
+#         db: Sesión de base de datos
+#         input_id: ID del input a actualizar
+#         input_data: Datos de actualización
+#         user_id: ID del usuario que realiza la actualización
+#         current_user: Usuario actual (para verificación de permisos)
+    
+#     Returns:
+#         El input actualizado o None si no se encontró
+    
+#     Raises:
+#         HTTPException: Si hay problemas de permisos o validación
+#     """
+#     # Obtener el input
+#     db_input = get_input(db, input_id, current_user)
+#     if not db_input:
+#         return None
+    
+#     # Verificar permisos
+#     if current_user and not role_service.is_admin(current_user) and db_input.user_id != user_id:
+#         raise HTTPException(
+#             status_code=status.HTTP_403_FORBIDDEN,
+#             detail="No tienes permiso para actualizar este input"
+#         )
+    
+#     # Preparar datos de actualización
+#     update_data = input_data.dict(exclude_unset=True, exclude={"status_id"})
+    
+#     # Manejo especial para cantidades con decimales
+#     if "quantity_received" in update_data or "quantity_taken" in update_data:
+#         try:
+#             # Convertir a Decimal para cálculos precisos
+#             quantity_received = safe_decimal(
+#                 update_data.get("quantity_received", db_input.quantity_received)
+#             )
+#             quantity_taken = safe_decimal(
+#                 update_data.get("quantity_taken", db_input.quantity_taken)
+#             )
+            
+#             # Verificar outputs existentes
+#             outputs_total = Decimal(str(db.query(func.sum(Output.quantity_output)))
+#                                 .filter(Output.input_id == input_id)
+#                                 .scalar() or 0.0)
+            
+#             # Validación 1: No permitir que lo tomado exceda lo recibido
+#             if quantity_taken > quantity_received and not is_approximately_equal(
+#                 float(quantity_taken), float(quantity_received)):
+#                 raise HTTPException(
+#                     status_code=status.HTTP_400_BAD_REQUEST,
+#                     detail=f"La cantidad tomada ({float(quantity_taken):.2f}) no puede ser mayor que la recibida ({float(quantity_received):.2f})"
+#                 )
+            
+#             # Validación 2: Si hay outputs, no permitir reducir cantidad recibida
+#             if outputs_total > 0:
+#                 if quantity_received < outputs_total and not is_approximately_equal(
+#                     float(quantity_received), float(outputs_total)):
+#                     raise HTTPException(
+#                         status_code=status.HTTP_400_BAD_REQUEST,
+#                         detail=f"No se puede reducir la cantidad recibida ({float(quantity_received):.2f}) "
+#                               f"por debajo de las salidas registradas ({float(outputs_total):.2f})"
+#                     )
+                
+#                 # Si hay outputs, usar esa cantidad como quantity_taken
+#                 quantity_taken = outputs_total
+            
+#             # Calcular total disponible con precisión decimal
+#             total_available = quantity_received - quantity_taken
+            
+#             # Actualizar datos con valores convertidos a float para la base de datos
+#             update_data.update({
+#                 "quantity_received": float(quantity_received),
+#                 "quantity_taken": float(quantity_taken),
+#                 "total": float(total_available)
+#             })
+            
+#         except Exception as e:
+#             logger.error(f"Error en cálculo de decimales: {str(e)}")
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail="Error en los cálculos de cantidad. Verifique los valores."
+#             )
+    
+#     # Aplicar actualizaciones
+#     for key, value in update_data.items():
+#         setattr(db_input, key, value)
+    
+#     # Manejar estado si está presente
+#     if input_data.status_id is not None:
+#         _update_input_status(db_input, input_data.status_id)
+    
+#     # Confirmar cambios
+#     try:
+#         db.commit()
+#         db.refresh(db_input)
+#         logger.info(f"Input {input_id} actualizado correctamente por usuario {user_id}")
+#         return db_input
+#     except Exception as e:
+#         db.rollback()
+#         logger.error(f"Error al guardar input {input_id}: {str(e)}")
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail="Error al guardar los cambios en la base de datos"
+#         )
+
+def to_decimal(val) -> Decimal:
+    try:
+        return Decimal(str(val)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError, TypeError) as e:
+        logger.error(f"Error al convertir a Decimal: {val} - {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Valor inválido para cantidad decimal."
+        )
+
+def is_approximately_equal(a: Decimal, b: Decimal, tolerance: Decimal = Decimal("0.0001")) -> bool:
+    return abs(a - b) < tolerance
+
+def update_input(
+    db: Session,
+    input_id: int,
+    input_data,
+    user_id: int,
+    current_user: Optional["User"] = None
+) -> Optional["Input"]:
     db_input = get_input(db, input_id, current_user)
     if not db_input:
         return None
-    
-    # Verificar que el input pertenezca al usuario (salvo que sea admin)
+
     if current_user and not role_service.is_admin(current_user) and db_input.user_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes permiso para actualizar este input"
         )
-    
-    # Actualizar los campos
+
     update_data = input_data.dict(exclude_unset=True, exclude={"status_id"})
-    
-    # Si se actualiza la cantidad recibida o tomada, verificar que la cantidad tomada no exceda la recibida
+
     if "quantity_received" in update_data or "quantity_taken" in update_data:
-        quantity_received = update_data.get("quantity_received", db_input.quantity_received)
-        quantity_taken = update_data.get("quantity_taken", db_input.quantity_taken)
-        
-        # Verificar que quantity_taken no exceda quantity_received
-        if quantity_taken > quantity_received:
+        try:
+            quantity_received = to_decimal(update_data.get("quantity_received", db_input.quantity_received))
+            quantity_taken = to_decimal(update_data.get("quantity_taken", db_input.quantity_taken))
+
+            outputs_raw = db.query(func.sum(Output.quantity_output)).filter(Output.input_id == input_id).scalar()
+            outputs_total = to_decimal(outputs_raw or 0)
+
+            if quantity_taken > quantity_received and not is_approximately_equal(quantity_taken, quantity_received):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"La cantidad tomada ({quantity_taken}) no puede ser mayor que la recibida ({quantity_received})"
+                )
+
+            if outputs_total > 0 and quantity_received < outputs_total and not is_approximately_equal(quantity_received, outputs_total):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"La cantidad de salida ({outputs_total}) excede la cantidad disponible ({quantity_received})"
+                )
+
+            if outputs_total > 0:
+                quantity_taken = outputs_total
+
+            total_available = (quantity_received - quantity_taken).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+            update_data.update({
+                "quantity_received": quantity_received,
+                "quantity_taken": quantity_taken,
+                "total": total_available
+            })
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception("Error en los cálculos de cantidad")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"La cantidad tomada ({quantity_taken}) no puede ser mayor que la cantidad recibida ({quantity_received})"
+                detail="Error en los cálculos de cantidad. Verifique los valores."
             )
-        
-        # Verificar si hay outputs para este input
-        outputs_total = db.query(func.sum(Output.quantity_output)).filter(Output.input_id == input_id).scalar() or 0
-        
-        # Si hay outputs, verificar que la nueva cantidad recibida no sea menor que la cantidad ya tomada por outputs
-        if outputs_total > 0 and quantity_received < outputs_total:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"No se puede reducir la cantidad recibida a ({quantity_received}) porque ya se han registrado salidas por ({outputs_total})"
-            )
-        
-        # Si hay outputs, usar esa cantidad como quantity_taken
-        if outputs_total > 0:
-            quantity_taken = outputs_total
-            update_data["quantity_taken"] = outputs_total
-        
-        update_data["total"] = quantity_received - quantity_taken
-    
-    # Actualizar los campos
+
     for key, value in update_data.items():
         setattr(db_input, key, value)
-    
-    # Manejar específicamente el campo status_id
-    if input_data.status_id is not None:
-        # Convertir el estado del esquema al estado del modelo
-        model_status = None
-        
-        from app.schemas.input_output_schema import InputStatus as SchemaInputStatus
-        if input_data.status_id == SchemaInputStatus.pending:
-            model_status = InputStatus.pending
-        elif input_data.status_id == SchemaInputStatus.processing:
-            model_status = InputStatus.processing
-        elif input_data.status_id == SchemaInputStatus.completed:
-            model_status = InputStatus.completed
-        elif input_data.status_id == SchemaInputStatus.cancelled:
-            model_status = InputStatus.cancelled
-        
-        if model_status:
-            db_input.status_id = model_status
-    
-    # Guardar los cambios
-    db.commit()
-    db.refresh(db_input)
-    
-    logger.info(f"Input {input_id} actualizado por el usuario {user_id}")
-    return db_input
 
+    if input_data.status_id is not None:
+        _update_input_status(db_input, input_data.status_id)
+
+    try:
+        db.commit()
+        db.refresh(db_input)
+        logger.info(f"Input {input_id} actualizado correctamente por usuario {user_id}")
+        return db_input
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error al guardar input {input_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al guardar los cambios en la base de datos"
+        )
+
+def _update_input_status(db_input: Input, new_status_id: int):
+    status_mapping = {
+        1: InputStatus.pending,
+        2: InputStatus.processing,
+        3: InputStatus.completed,
+        4: InputStatus.cancelled
+    }
+
+    if new_status_id in status_mapping:
+        db_input.status_id = status_mapping[new_status_id]
+    else:
+        logger.warning(f"Intento de asignar estado inválido: {new_status_id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Estado de input no válido"
+        )
+
+def _update_input_status(db_input: Input, new_status_id: int):
+    """Actualiza el estado del input convirtiendo entre esquema y modelo"""
+    status_mapping = {
+        1: InputStatus.pending,    # pending
+        2: InputStatus.processing, # processing
+        3: InputStatus.completed,  # completed
+        4: InputStatus.cancelled   # cancelled
+    }
+    
+    if new_status_id in status_mapping:
+        db_input.status_id = status_mapping[new_status_id]
+    else:
+        logger.warning(f"Intento de asignar estado inválido: {new_status_id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Estado de input no válido"
+        )
+
+def get_input(db: Session, input_id: int, current_user: Optional[User] = None) -> Optional[Input]:
+    """Obtiene un input con verificación básica de permisos"""
+    input = db.query(Input).filter(Input.id == input_id).first()
+    
+    if input and current_user and not role_service.is_admin(current_user) and input.user_id != current_user.id:
+        return None
+    
+    return input
 def delete_input(db: Session, input_id: int, user_id: int, current_user: Optional[User] = None) -> bool:
     """
     Elimina un input.

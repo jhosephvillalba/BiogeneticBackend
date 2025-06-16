@@ -36,7 +36,10 @@ class Bull(Base, BaseModel):
     __tablename__ = "bulls"
     
     name = Column(String(100), nullable=False)
-    register = Column(String(50), unique=True, index=True, nullable=True)
+    register = Column(String(50), unique=True, nullable=True)
+    lote = Column(String(100), nullable=True)  # Esto se lo asigna un usuario administrador
+    escalerilla = Column(String(100), nullable=True) 
+    description = Column(String(255), nullable=True)
     race_id = Column(Integer, ForeignKey("races.id"), nullable=False)
     sex_id = Column(Integer, ForeignKey("sexes.id"), nullable=False)
     status = Column(Enum(BullStatus), default=BullStatus.active, nullable=False)

@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from app.models.base_model import Base, BaseModel
 import enum
 from datetime import datetime
+from sqlalchemy import Numeric  # Asegúrate de tener esto importado
 
 class InputStatus(enum.Enum):
     pending = "Pending"
@@ -13,14 +14,16 @@ class InputStatus(enum.Enum):
 class Input(Base, BaseModel):
     __tablename__ = "inputs"
     
-    quantity_received = Column(Float, nullable=False)
+    
     escalarilla = Column(String(100), nullable=False) # Esto se lo asigna un usuario administrador 
     bull_id = Column(Integer, ForeignKey("bulls.id"), nullable=False)
     status_id = Column(Enum(InputStatus), default=InputStatus.pending, nullable=False)
     lote = Column(String(50), nullable=False)  # Esto se lo asigna un usuario administrador 
     fv = Column(DateTime, nullable=False)   # Esto se lo asigna un usuario administrador 
-    quantity_taken = Column(Float, nullable=False)
-    total = Column(Float, nullable=False)
+  
+    quantity_received = Column(Numeric(10, 2), nullable=False)
+    quantity_taken = Column(Numeric(10, 2), nullable=False)
+    total = Column(Numeric(10, 2), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     # Relaciones
@@ -36,7 +39,7 @@ class Output(Base, BaseModel):
     
     input_id = Column(Integer, ForeignKey("inputs.id"), nullable=False)
     output_date = Column(DateTime, default=datetime.now, nullable=False)
-    quantity_output = Column(Float, nullable=False)
+    quantity_output =  Column(Numeric(10, 2), nullable=False)
     remark = Column(Text, nullable=True)
     
     # Relaciones

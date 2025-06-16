@@ -53,6 +53,9 @@ class BullBase(BaseModel):
     race_id: int
     sex_id: int
     status: Optional[BullStatus] = BullStatus.active
+    lote: Optional[str] = None # Esto se lo asigna un usuario administrador
+    escalerilla: Optional[str] = None# Esto se lo asigna un usuario administrador 
+    description: Optional[str] = None
 
     class Config:
         allow_population_by_field_name = True
@@ -69,6 +72,9 @@ class BullUpdate(BullBase):
     race_id: Optional[int] = None
     sex_id: Optional[int] = None
     status: Optional[BullStatus] = None
+    lote: Optional[str] = None  # Esto se lo asigna un usuario administrador
+    escalerilla: Optional[str] = None  # Esto se lo asigna un usuario administrador 
+    description: Optional[str] = None
 
 class BullSchema(BaseSchema, BullBase):
     user_id: int
@@ -91,6 +97,9 @@ class BullSchema(BaseSchema, BullBase):
                 "race_id": bull.race_id,
                 "sex_id": bull.sex_id,
                 "user_id": bull.user_id,
+                "lote": bull.lote,
+                "escalerilla": bull.escalerilla,
+                "description": bull.description,
                 "created_at": bull.created_at,
                 "updated_at": bull.updated_at
             }
@@ -136,6 +145,9 @@ class BullDetailSchema(BaseModel):
     sex_id: int
     sex_name: Optional[str] = None
     status: Optional[str] = None
+    lote: Optional[str] = None  # Esto se lo asigna un usuario administrador
+    escalerilla: Optional[str] = None  # Esto se lo asigna un usuario administrador
+    description: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     user: UserInfoSchema

@@ -31,6 +31,8 @@ class User(Base, BaseModel):
     bulls = relationship("Bull", back_populates="user")
     opus = relationship("Opus", back_populates="cliente")
     inputs = relationship("Input", back_populates="user")
+    # Producciones embrionarias asociadas a este usuario
+    producciones_embrionarias = relationship("ProduccionEmbrionaria", back_populates="cliente", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<User {self.full_name}>" 
