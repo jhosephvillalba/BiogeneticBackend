@@ -36,6 +36,7 @@ class OpusBase(BaseModel):
 
     total_embriones: int = Field(ge=0)
     porcentaje_total_embriones: str
+    produccion_embrionaria_id:int
 
 class OpusCreate(OpusBase):
     pass

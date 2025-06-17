@@ -136,6 +136,7 @@ def get_opus_by_client(
                 "porcentaje_vtdt": opus.porcentaje_vtdt,
                 "total_embriones": opus.total_embriones,
                 "porcentaje_total_embriones": opus.porcentaje_total_embriones,
+                "produccion_embrionaria_id":opus.produccion_embrionaria_id,
                 "created_at": opus.created_at,
                 "updated_at": opus.updated_at
             }
@@ -214,9 +215,11 @@ def create_opus(
             "cliente_id": db_opus.cliente_id,
             "donante_id": db_opus.donante_id,
             "toro_id": db_opus.toro_id,
+            "donante_code":db_opus.donante_code,
             "fecha": db_opus.fecha,
             "lugar": db_opus.lugar,
             "finca": db_opus.finca,
+            "race":db_opus.race,
             "toro": db_opus.toro,
             "gi": db_opus.gi,
             "gii": db_opus.gii,
@@ -234,6 +237,7 @@ def create_opus(
             "vt_dt": db_opus.vt_dt,
             "porcentaje_vtdt": db_opus.porcentaje_vtdt,
             "total_embriones": db_opus.total_embriones,
+            "produccion_embrionaria_id":db_opus.produccion_embrionaria_id,
             "porcentaje_total_embriones": db_opus.porcentaje_total_embriones,
             "created_at": db_opus.created_at,
             "updated_at": db_opus.updated_at
@@ -502,6 +506,9 @@ def get_opus_admin_report(
                 "vt_dt": opus.vt_dt,
                 "porcentaje_vtdt": opus.porcentaje_vtdt,
                 "total_embriones": opus.total_embriones,
+                "donante_code":opus.donante_code,
+                "race":opus.race,
+                "produccion_embrionaria_id":opus.produccion_embrionaria_id,
                 "porcentaje_total_embriones": opus.porcentaje_total_embriones
             })
         
@@ -530,25 +537,121 @@ def get_opus_admin_report(
             detail=f"Error al obtener reporte: {str(e)}"
         )
 
-def get_opus_by_date_for_client(
+# def get_opus_by_date_for_client(
+#     db: Session,
+#     fecha: date,
+#     current_user: User
+# ) -> List[Dict[str, Any]]:
+#     """
+#     Obtiene todos los registros de Opus de una fecha específica para un cliente,
+#     incluyendo la información de sus bovinos (donante y toro).
+#     Solo accesible para el propio cliente.
+#     """
+#     logger = logging.getLogger(__name__)
+#     logger.info(f"Buscando registros para la fecha: {fecha} y cliente_id: {current_user.id}")
+    
+#     try:
+#         # Crear alias para las tablas de toros
+#         donante_bull = aliased(Bull, name='donante_bull')
+#         toro_bull = aliased(Bull, name='toro_bull')
+        
+#         # Construir la consulta base con joins
+#         query = db.query(
+#             Opus,
+#             User.full_name.label('cliente_nombre'),
+#             donante_bull.name.label('donante_nombre'),
+#             toro_bull.name.label('toro_nombre'),
+#         ).join(
+#             User, Opus.cliente_id == User.id
+#         ).outerjoin(
+#             donante_bull, Opus.donante_id == donante_bull.id
+#         ).outerjoin(
+#             toro_bull, Opus.toro_id == toro_bull.id
+#         ).filter(
+#             Opus.cliente_id == current_user.id,
+#             func.date(Opus.fecha) == fecha
+#         )
+        
+#         # Ejecutar la consulta y obtener resultados
+#         results = query.all()
+#         logger.info(f"Registros encontrados: {len(results)}")
+        
+#         # Si no hay resultados, verificar si hay registros para esa fecha
+#         if not results:
+#             # Consulta de verificación
+#             fecha_check = db.query(Opus.fecha).distinct().all()
+#             fechas_disponibles = [f.fecha for f in fecha_check]
+#             logger.info(f"No se encontraron registros para la fecha {fecha}.")
+#             logger.info(f"Fechas disponibles en la base de datos: {fechas_disponibles}")
+#             return []
+        
+#         # Formatear resultados
+#         opus_list = []
+#         for row in results:
+#             opus = row[0]
+#             opus_data = {
+#                 "id": opus.id,
+#                 "cliente_id": opus.cliente_id,
+#                 "cliente_nombre": row.cliente_nombre,
+#                 "donante_id": opus.donante_id,
+#                 "donante_nombre": row.donante_nombre,
+#                 "toro_id": opus.toro_id,
+#                 "toro_nombre": row.toro_nombre,
+#                 "fecha": opus.fecha,
+#                 "lugar": opus.lugar,
+#                 "finca": opus.finca,
+#                 "toro": opus.toro,
+#                 "gi": opus.gi,
+#                 "gii": opus.gii,
+#                 "giii": opus.giii,
+#                 "viables": opus.viables,
+#                 "otros": opus.otros,
+#                 "total_oocitos": opus.total_oocitos,
+#                 "ctv": opus.ctv,
+#                 "clivados": opus.clivados,
+#                 "porcentaje_cliv": opus.porcentaje_cliv,
+#                 "prevision": opus.prevision,
+#                 "porcentaje_prevision": opus.porcentaje_prevision,
+#                 "empaque": opus.empaque,
+#                 "porcentaje_empaque": opus.porcentaje_empaque,
+#                 "vt_dt": opus.vt_dt,
+#                 "porcentaje_vtdt": opus.porcentaje_vtdt,
+#                 "total_embriones": opus.total_embriones,
+#                 "porcentaje_total_embriones": opus.porcentaje_total_embriones,
+#                 "created_at": opus.created_at,
+#                 "updated_at": opus.updated_at
+#             }
+#             opus_list.append(opus_data)
+#             logger.info(f"Procesado registro ID: {opus.id} para fecha: {opus.fecha}")
+        
+#         return opus_list
+#     except Exception as e:
+#         logger.error(f"Error en get_opus_by_date_for_client: {str(e)}")
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Error al obtener registros por fecha: {str(e)}"
+#         ) 
+
+
+def get_opus_by_production_for_client(
     db: Session,
-    fecha: date,
+    production_id: int,
     current_user: User
 ) -> List[Dict[str, Any]]:
     """
-    Obtiene todos los registros de Opus de una fecha específica para un cliente,
+    Obtiene todos los registros de Opus para una producción específica (por production_id),
     incluyendo la información de sus bovinos (donante y toro).
-    Solo accesible para el propio cliente.
+    - Si el usuario es un cliente, solo puede ver sus propios registros.
+    - Si es admin, puede ver todos los registros.
     """
     logger = logging.getLogger(__name__)
-    logger.info(f"Buscando registros para la fecha: {fecha} y cliente_id: {current_user.id}")
+    logger.info(f"Buscando registros para la producción: {production_id} y cliente_id: {current_user.id}")
     
     try:
-        # Crear alias para las tablas de toros
         donante_bull = aliased(Bull, name='donante_bull')
         toro_bull = aliased(Bull, name='toro_bull')
-        
-        # Construir la consulta base con joins
+
+        # Consulta base
         query = db.query(
             Opus,
             User.full_name.label('cliente_nombre'),
@@ -561,24 +664,16 @@ def get_opus_by_date_for_client(
         ).outerjoin(
             toro_bull, Opus.toro_id == toro_bull.id
         ).filter(
-            Opus.cliente_id == current_user.id,
-            func.date(Opus.fecha) == fecha
+            Opus.produccion_embrionaria_id == production_id
         )
-        
-        # Ejecutar la consulta y obtener resultados
+
+        # Si no es admin, filtrar solo los registros del cliente actual
+        # if current_user. != 'admin':
+        #     query = query.filter(Opus.cliente_id == current_user.id)
+
         results = query.all()
         logger.info(f"Registros encontrados: {len(results)}")
-        
-        # Si no hay resultados, verificar si hay registros para esa fecha
-        if not results:
-            # Consulta de verificación
-            fecha_check = db.query(Opus.fecha).distinct().all()
-            fechas_disponibles = [f.fecha for f in fecha_check]
-            logger.info(f"No se encontraron registros para la fecha {fecha}.")
-            logger.info(f"Fechas disponibles en la base de datos: {fechas_disponibles}")
-            return []
-        
-        # Formatear resultados
+
         opus_list = []
         for row in results:
             opus = row[0]
@@ -591,6 +686,8 @@ def get_opus_by_date_for_client(
                 "toro_id": opus.toro_id,
                 "toro_nombre": row.toro_nombre,
                 "fecha": opus.fecha,
+                "race":opus.race,
+                "donante_code":opus.donante_code,
                 "lugar": opus.lugar,
                 "finca": opus.finca,
                 "toro": opus.toro,
@@ -611,16 +708,18 @@ def get_opus_by_date_for_client(
                 "porcentaje_vtdt": opus.porcentaje_vtdt,
                 "total_embriones": opus.total_embriones,
                 "porcentaje_total_embriones": opus.porcentaje_total_embriones,
+                "produccion_embrionaria_id":opus.produccion_embrionaria_id,
                 "created_at": opus.created_at,
                 "updated_at": opus.updated_at
             }
             opus_list.append(opus_data)
-            logger.info(f"Procesado registro ID: {opus.id} para fecha: {opus.fecha}")
-        
+            logger.info(f"Procesado registro ID: {opus.id}")
+
         return opus_list
+
     except Exception as e:
-        logger.error(f"Error en get_opus_by_date_for_client: {str(e)}")
+        logger.error(f"Error en get_opus_by_production_for_client: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al obtener registros por fecha: {str(e)}"
-        ) 
+            detail=f"Error al obtener registros por producción: {str(e)}"
+        )

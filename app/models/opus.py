@@ -13,11 +13,13 @@ class ProduccionEmbrionaria(Base, BaseModel):
     cliente_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     fecha_opu = Column(Date, nullable=False)
     lugar = Column(String(100), nullable=False)
+    finca = Column(String(100), nullable=False)
     hora_inicio = Column(Time, nullable=True)
     hora_final = Column(Time, nullable=True)
     envase = Column(String(100), nullable=False)
     fecha_transferencia = Column(Date, nullable=False)  # Se debe calcular al guardar
-
+    output_id=Column(Integer, nullable=True)
+    
     # Relaciones
     cliente = relationship("User", back_populates="producciones_embrionarias")
     opus = relationship("Opus", back_populates="produccion_embrionaria", cascade="all, delete-orphan")

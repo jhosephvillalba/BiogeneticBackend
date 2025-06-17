@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import date
+from datetime import date, datetime
 import logging
 
 from app.database.base import get_db
@@ -10,8 +10,10 @@ from app.services.auth_service import get_current_user_from_token
 from app.schemas.produccion_embrionaria import (
     ProduccionEmbrionariaCreate,
     ProduccionEmbrionariaInDB,
-    ProduccionEmbrionariaDetail
+    ProduccionEmbrionariaDetail,
+    ProduccionEmbrionariaUpdate
 )
+from typing import Optional
 
 from app.models.user import User
 
@@ -41,6 +43,34 @@ async def create_produccion_embrionaria(
             status_code=500,
             detail=f"Error al crear producción embrionaria: {str(e)}"
         )
+    
+
+
+@router.put("/{production_id}", response_model=ProduccionEmbrionariaUpdate, status_code=status.HTTP_200_OK)
+async def create_produccion_embrionaria(
+    production_id:int,
+    data: ProduccionEmbrionariaUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token)
+):
+    """
+    Crear una producción embrionaria para un cliente específico (solo admin).
+    """
+    try:
+        if not produccion_embrionaria_service.role_service.is_admin(current_user):
+            raise HTTPException(status_code=403, detail="No autorizado")
+
+        return produccion_embrionaria_service.update(db, production_id, data)
+    except Exception as e:
+        logging.error(f"Error al crear producción embrionaria: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al crear producción embrionaria: {str(e)}"
+        )
+    
+
+
+
 
 @router.get("/mis", response_model=List[ProduccionEmbrionariaDetail])
 async def get_my_producciones_embrionarias(
@@ -59,20 +89,40 @@ async def get_my_producciones_embrionarias(
             detail=f"Error al obtener producciones embrionarias: {str(e)}"
         )
 
-@router.get("/{produccion_id}/opus", response_model=List[dict])
-async def get_opus_by_produccion(
-    produccion_id: int,
+
+@router.get("/", response_model=List[ProduccionEmbrionariaInDB])
+def get_producciones_admin(
+    fecha_inicio: Optional[datetime] = Query(None),
+    fecha_fin: Optional[datetime] = Query(None),
+    query: Optional[str] = Query(None, description="Buscar por nombre o documento del cliente"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_from_token)
+    current_user: User = Depends(get_current_user_from_token),
+):
+    return produccion_embrionaria_service.get_all(
+        db=db,
+        current_user=current_user,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        query=query
+    )
+
+
+@router.get("/{production_id}", response_model=ProduccionEmbrionariaDetail, status_code=status.HTTP_200_OK)
+async def create_produccion_embrionaria(
+    production_id:int,
+    db: Session = Depends(get_db)
 ):
     """
-    Obtener todos los registros Opus asociados a una producción embrionaria específica.
+    Crear una producción embrionaria para un cliente específico (solo admin).
     """
     try:
-        return produccion_embrionaria_service.get_by_cliente(db, produccion_id, current_user)
+        # if not produccion_embrionaria_service.role_service.is_admin(current_user):
+        #     raise HTTPException(status_code=403, detail="No autorizado")
+
+        return produccion_embrionaria_service.get_by_id(db, production_id)
     except Exception as e:
-        logging.error(f"Error al obtener opus de la producción {produccion_id}: {str(e)}")
+        logging.error(f"Error al crear producción embrionaria: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Error al obtener opus: {str(e)}"
+            detail=f"Error al crear producción embrionaria: {str(e)}"
         )

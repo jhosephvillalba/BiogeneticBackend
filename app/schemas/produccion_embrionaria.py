@@ -7,8 +7,10 @@ class ProduccionEmbrionariaBase(BaseModel):
     cliente_id: int
     fecha_opu: date
     lugar: str
+    finca: str
     hora_inicio: Optional[time] = None
     hora_final: Optional[time] = None
+    output_id:Optional[int] = None
     envase: str
     fecha_transferencia: date  # Calculado como fecha_opu + 7 días
 
@@ -20,10 +22,15 @@ class ProduccionEmbrionariaCreate(ProduccionEmbrionariaBase):
 class ProduccionEmbrionariaUpdate(BaseModel):
     fecha_opu: Optional[date] = None
     lugar: Optional[str] = None
+    finca: Optional[str] = None
     hora_inicio: Optional[time] = None
     hora_final: Optional[time] = None
     envase: Optional[str] = None
+    output_id:Optional[int] = None
     fecha_transferencia: Optional[date] = None
+
+    class Config:
+        orm_mode = True
 
 # Datos internos del modelo (incluye ID y timestamps)
 class ProduccionEmbrionariaInDB(ProduccionEmbrionariaBase):

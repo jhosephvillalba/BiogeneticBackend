@@ -200,6 +200,9 @@ def create_bull(db: Session, bull: BullCreate, current_user: User) -> Bull:
         race_id=bull.race_id,
         sex_id=bull.sex_id,
         status=model_status,
+        lote=bull.lote,
+        escalerilla=bull.escalerilla,
+        description=bull.description,
         user_id=current_user.id  # Usar el ID del usuario autenticado
     )
     
@@ -433,6 +436,9 @@ def create_bull_for_client(
         race_id=bull.race_id,
         sex_id=bull.sex_id,
         status=model_status,
+        lote=bull.lote,
+        escalerilla=bull.escalerilla,
+        description=bull.description,
         user_id=client_id  # Usar el ID del cliente
     )
     

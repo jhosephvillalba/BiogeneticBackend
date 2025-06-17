@@ -179,9 +179,9 @@ async def read_opus_by_client(
             detail=f"Error al obtener registros: {str(e)}"
         )
 
-@router.get("/by-date/{fecha}", response_model=List[OpusDateDetail])
+@router.get("/by-production/{prduction_id}", response_model=List[OpusDateDetail])
 async def read_opus_by_date(
-    fecha: date,
+    prduction_id: int,
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_from_token)
@@ -193,17 +193,17 @@ async def read_opus_by_date(
     """
     try:
         # Verificar que el usuario sea cliente
-        if not opus_service.role_service.is_client(current_user):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Esta ruta solo está disponible para clientes"
-            )
+        # if not opus_service.role_service.is_client(current_user):
+        #     raise HTTPException(
+        #         status_code=status.HTTP_403_FORBIDDEN,
+        #         detail="Esta ruta solo está disponible para clientes"
+        #     )
         
-        return opus_service.get_opus_by_date_for_client(db, fecha, current_user)
+        return opus_service.get_opus_by_production_for_client(db, prduction_id, current_user)
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"Error al obtener registros Opus por fecha {fecha}: {str(e)}")
+        logging.error(f"Error al obtener registros Opus de la producción {prduction_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener registros: {str(e)}"
