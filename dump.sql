@@ -1,5 +1,3 @@
-CREATE DATABASE  IF NOT EXISTS `biogenetic` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
-USE `biogenetic`;
 -- MySQL dump 10.13  Distrib 8.0.42, for Win64 (x86_64)
 --
 -- Host: localhost    Database: biogenetic
@@ -36,7 +34,6 @@ CREATE TABLE `alembic_version` (
 
 LOCK TABLES `alembic_version` WRITE;
 /*!40000 ALTER TABLE `alembic_version` DISABLE KEYS */;
-INSERT INTO `alembic_version` VALUES ('3f114334f288');
 /*!40000 ALTER TABLE `alembic_version` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -57,6 +54,9 @@ CREATE TABLE `bulls` (
   `id` int NOT NULL AUTO_INCREMENT,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
+  `lote` varchar(100) DEFAULT NULL,
+  `escalerilla` varchar(100) DEFAULT NULL,
+  `description` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `ix_bulls_register` (`register`),
   KEY `race_id` (`race_id`),
@@ -66,7 +66,7 @@ CREATE TABLE `bulls` (
   CONSTRAINT `bulls_ibfk_1` FOREIGN KEY (`race_id`) REFERENCES `races` (`id`),
   CONSTRAINT `bulls_ibfk_2` FOREIGN KEY (`sex_id`) REFERENCES `sexes` (`id`),
   CONSTRAINT `bulls_ibfk_3` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -75,7 +75,6 @@ CREATE TABLE `bulls` (
 
 LOCK TABLES `bulls` WRITE;
 /*!40000 ALTER TABLE `bulls` DISABLE KEYS */;
-INSERT INTO `bulls` VALUES ('Sociedad Sirf','123321',2,1,'active',3,1,'2025-05-27 14:35:25','2025-05-27 14:35:25'),('Becy','123322',3,2,'active',3,2,'2025-05-27 14:36:40','2025-05-27 14:36:40'),('Roi','00089',2,1,'active',6,3,'2025-06-11 07:48:15','2025-06-11 07:48:15'),('Azul Marino','00056',3,2,'active',6,4,'2025-06-11 07:48:46','2025-06-11 07:48:46');
 /*!40000 ALTER TABLE `bulls` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -87,14 +86,14 @@ DROP TABLE IF EXISTS `inputs`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `inputs` (
-  `quantity_received` float NOT NULL,
+  `quantity_received` decimal(10,2) NOT NULL,
   `escalarilla` varchar(100) NOT NULL,
   `bull_id` int NOT NULL,
   `status_id` enum('pending','processing','completed','cancelled') NOT NULL,
   `lote` varchar(50) NOT NULL,
   `fv` datetime NOT NULL,
-  `quantity_taken` float NOT NULL,
-  `total` float NOT NULL,
+  `quantity_taken` decimal(10,2) NOT NULL,
+  `total` decimal(10,2) NOT NULL,
   `user_id` int NOT NULL,
   `id` int NOT NULL AUTO_INCREMENT,
   `created_at` datetime DEFAULT NULL,
@@ -105,7 +104,7 @@ CREATE TABLE `inputs` (
   KEY `ix_inputs_id` (`id`),
   CONSTRAINT `inputs_ibfk_1` FOREIGN KEY (`bull_id`) REFERENCES `bulls` (`id`),
   CONSTRAINT `inputs_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -114,7 +113,6 @@ CREATE TABLE `inputs` (
 
 LOCK TABLES `inputs` WRITE;
 /*!40000 ALTER TABLE `inputs` DISABLE KEYS */;
-INSERT INTO `inputs` VALUES (2,'Sin asignar',1,'processing','Sin asignar','2025-05-27 14:36:02',1.9,0.1,3,1,'2025-05-27 14:36:02','2025-06-05 15:12:08'),(10,'Sin asignar',2,'pending','Sin asignar','2025-05-27 14:54:20',0,10,3,2,'2025-05-27 14:54:20','2025-05-27 14:54:20'),(1,'Sin asignar',2,'pending','Sin asignar','2025-05-27 15:08:48',0,1,3,3,'2025-05-27 15:08:48','2025-05-27 15:08:48'),(2,'Sin asignar',1,'pending','Sin asignar','2025-05-27 15:16:01',0,2,3,4,'2025-05-27 15:16:01','2025-05-27 15:16:01'),(3,'Sin asignar',2,'pending','Sin asignar','2025-05-27 15:21:14',0,3,3,5,'2025-05-27 15:21:14','2025-05-27 15:21:14'),(4,'Sin asignar',2,'pending','Sin asignar','2025-05-27 15:34:48',0,4,3,6,'2025-05-27 15:34:48','2025-05-27 15:34:48'),(4,'Sin asignar',1,'pending','Sin asignar','2025-05-27 15:52:06',0,4,3,7,'2025-05-27 15:52:06','2025-05-27 15:52:06'),(2,'Sin asignar',1,'pending','Sin asignar','2025-05-27 15:59:35',0,2,3,8,'2025-05-27 15:59:35','2025-05-27 15:59:35'),(3,'Sin asignar',2,'pending','Sin asignar','2025-05-27 17:29:33',0,3,3,9,'2025-05-27 17:29:33','2025-05-27 17:29:33');
 /*!40000 ALTER TABLE `inputs` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -128,7 +126,7 @@ DROP TABLE IF EXISTS `opus`;
 CREATE TABLE `opus` (
   `id` int NOT NULL AUTO_INCREMENT,
   `cliente_id` int NOT NULL,
-  `donante_id` int NOT NULL,
+  `donante_id` int DEFAULT NULL,
   `fecha` date NOT NULL,
   `toro` varchar(100) NOT NULL,
   `gi` int NOT NULL,
@@ -153,15 +151,20 @@ CREATE TABLE `opus` (
   `toro_id` int NOT NULL,
   `lugar` varchar(100) DEFAULT NULL,
   `finca` varchar(100) DEFAULT NULL,
+  `race` varchar(50) NOT NULL,
+  `donante_code` varchar(100) NOT NULL,
+  `produccion_embrionaria_id` int NOT NULL,
   PRIMARY KEY (`id`),
   KEY `cliente_id` (`cliente_id`),
   KEY `donante_id` (`donante_id`),
   KEY `ix_opus_id` (`id`),
   KEY `fk_opus_toro_id_bulls` (`toro_id`),
+  KEY `produccion_embrionaria_id` (`produccion_embrionaria_id`),
   CONSTRAINT `fk_opus_toro_id_bulls` FOREIGN KEY (`toro_id`) REFERENCES `bulls` (`id`),
   CONSTRAINT `opus_ibfk_1` FOREIGN KEY (`cliente_id`) REFERENCES `users` (`id`),
-  CONSTRAINT `opus_ibfk_2` FOREIGN KEY (`donante_id`) REFERENCES `bulls` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  CONSTRAINT `opus_ibfk_2` FOREIGN KEY (`donante_id`) REFERENCES `bulls` (`id`),
+  CONSTRAINT `opus_ibfk_3` FOREIGN KEY (`produccion_embrionaria_id`) REFERENCES `produccion_embrionaria` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -170,7 +173,6 @@ CREATE TABLE `opus` (
 
 LOCK TABLES `opus` WRITE;
 /*!40000 ALTER TABLE `opus` DISABLE KEYS */;
-INSERT INTO `opus` VALUES (2,3,2,'2025-05-28','Sociedad Sirf',3,2,2,7,2,9,7,3,'33%',2,'22%',2,'22%',1,'11%',1,'11%','2025-05-28 07:53:13','2025-05-28 07:53:13',1,'Soledad','Rey'),(3,3,2,'2025-05-28','Sociedad Sirf',3,2,2,7,2,9,7,3,'33%',2,'22%',2,'22%',1,'11%',1,'11%','2025-05-28 07:55:31','2025-05-28 07:55:31',1,'Soledad','Rey'),(4,3,2,'2025-05-28','Sociedad Sirf',3,2,2,7,2,9,7,3,'33%',2,'22%',2,'22%',1,'11%',1,'11%','2025-05-28 08:04:46','2025-05-28 08:04:46',1,'Soledad','Rey'),(5,3,2,'2025-05-28','Sociedad Sirf',1,1,2,4,3,7,5,2,'29%',2,'29%',1,'14%',1,'14%',1,'14%','2025-05-28 08:23:34','2025-05-28 08:23:34',1,'Soledad','Rey'),(6,3,2,'2025-05-28','Sociedad Sirf',2,5,3,10,4,14,11,5,'36%',4,'29%',3,'21%',2,'14%',2,'14%','2025-05-28 11:02:57','2025-05-28 11:02:57',1,'Soledad','Rey'),(7,3,2,'2025-05-28','Sociedad Sirf',2,2,3,7,2,9,7,3,'33%',2,'22%',2,'22%',1,'11%',1,'11%','2025-05-28 11:20:02','2025-05-28 11:20:02',1,'Soledad','Rey'),(8,6,4,'2025-06-11','',3,2,3,8,0,8,4,3,'75%',0,'0%',0,'0%',0,'0%',0,'0%','2025-06-11 07:53:13','2025-06-11 07:53:13',3,'Soleda','Finca Rey'),(9,6,4,'2025-06-11','',3,2,3,8,0,8,4,3,'75%',0,'0%',0,'0%',0,'0%',0,'0%','2025-06-11 08:02:06','2025-06-11 08:02:06',3,'Soleda','Finca Rey'),(10,6,4,'2025-06-11','',1,1,2,4,2,6,2,1,'50%',0,'0%',0,'0%',0,'0%',0,'0%','2025-06-11 08:04:05','2025-06-11 08:04:05',3,'Soledad','Finca Rey'),(11,3,2,'2025-06-11','',3,3,4,10,3,13,10,9,'90%',0,'0%',0,'0%',0,'0%',0,'0%','2025-06-11 12:11:29','2025-06-11 12:11:29',1,'Santo Real','Finca el fino');
 /*!40000 ALTER TABLE `opus` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -184,7 +186,7 @@ DROP TABLE IF EXISTS `outputs`;
 CREATE TABLE `outputs` (
   `input_id` int NOT NULL,
   `output_date` datetime NOT NULL,
-  `quantity_output` float NOT NULL,
+  `quantity_output` decimal(10,2) NOT NULL,
   `remark` text,
   `id` int NOT NULL AUTO_INCREMENT,
   `created_at` datetime DEFAULT NULL,
@@ -193,7 +195,7 @@ CREATE TABLE `outputs` (
   KEY `input_id` (`input_id`),
   KEY `ix_outputs_id` (`id`),
   CONSTRAINT `outputs_ibfk_1` FOREIGN KEY (`input_id`) REFERENCES `inputs` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -202,8 +204,43 @@ CREATE TABLE `outputs` (
 
 LOCK TABLES `outputs` WRITE;
 /*!40000 ALTER TABLE `outputs` DISABLE KEYS */;
-INSERT INTO `outputs` VALUES (1,'2025-06-05 20:09:35',1.5,'Salida registrada desde edición',1,'2025-06-05 15:09:35','2025-06-05 15:09:35'),(1,'2025-06-05 20:12:08',0.4,'Salida registrada desde edición',2,'2025-06-05 15:12:08','2025-06-05 15:12:08');
 /*!40000 ALTER TABLE `outputs` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `produccion_embrionaria`
+--
+
+DROP TABLE IF EXISTS `produccion_embrionaria`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `produccion_embrionaria` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `cliente_id` int NOT NULL,
+  `fecha_opu` date NOT NULL,
+  `lugar` varchar(100) NOT NULL,
+  `hora_inicio` time DEFAULT NULL,
+  `hora_final` time DEFAULT NULL,
+  `envase` varchar(100) NOT NULL,
+  `fecha_transferencia` date NOT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  `finca` varchar(100) NOT NULL,
+  `output_id` int DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `cliente_id` (`cliente_id`),
+  KEY `ix_produccion_embrionaria_id` (`id`),
+  CONSTRAINT `produccion_embrionaria_ibfk_1` FOREIGN KEY (`cliente_id`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `produccion_embrionaria`
+--
+
+LOCK TABLES `produccion_embrionaria` WRITE;
+/*!40000 ALTER TABLE `produccion_embrionaria` DISABLE KEYS */;
+/*!40000 ALTER TABLE `produccion_embrionaria` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -214,16 +251,16 @@ DROP TABLE IF EXISTS `races`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `races` (
-  `name` varchar(50) NOT NULL,
-  `description` varchar(255) NOT NULL,
-  `code` varchar(20) NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `code` varchar(10) NOT NULL,
   `id` int NOT NULL AUTO_INCREMENT,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `ix_races_code` (`code`),
   KEY `ix_races_id` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -232,7 +269,6 @@ CREATE TABLE `races` (
 
 LOCK TABLES `races` WRITE;
 /*!40000 ALTER TABLE `races` DISABLE KEYS */;
-INSERT INTO `races` VALUES ('Holstein','Raza lechera de origen holandés','HOL',1,'2025-05-27 14:22:05','2025-05-27 14:22:05'),('Jersey','Raza lechera de tamaño pequeño','JER',2,'2025-05-27 14:22:05','2025-05-27 14:22:05'),('Angus','Raza de carne de origen escocés','ANG',3,'2025-05-27 14:22:05','2025-05-27 14:22:05'),('Brahman','Raza de carne de origen indio','BRH',4,'2025-05-27 14:22:05','2025-05-27 14:22:05'),('Simmental','Raza de doble propósito de origen suizo','SIM',5,'2025-05-27 14:22:05','2025-05-27 14:22:05'),('Sirf Gold','Gold','SIRGOLD',6,'2025-06-10 14:29:57','2025-06-10 14:29:57');
 /*!40000 ALTER TABLE `races` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -304,7 +340,7 @@ DROP TABLE IF EXISTS `sexes`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `sexes` (
-  `name` varchar(20) NOT NULL,
+  `name` varchar(50) NOT NULL,
   `code` int NOT NULL,
   `id` int NOT NULL AUTO_INCREMENT,
   `created_at` datetime DEFAULT NULL,
@@ -312,7 +348,7 @@ CREATE TABLE `sexes` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `ix_sexes_code` (`code`),
   KEY `ix_sexes_id` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -321,7 +357,7 @@ CREATE TABLE `sexes` (
 
 LOCK TABLES `sexes` WRITE;
 /*!40000 ALTER TABLE `sexes` DISABLE KEYS */;
-INSERT INTO `sexes` VALUES ('Macho',1,1,'2025-05-27 14:22:05','2025-05-27 14:22:05'),('Hembra',2,2,'2025-05-27 14:22:05','2025-05-27 14:22:05');
+INSERT INTO `sexes` VALUES ('SX',1,1,NULL,NULL),('CV',2,2,NULL,NULL);
 /*!40000 ALTER TABLE `sexes` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -377,4 +413,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-06-11 13:32:46
+-- Dump completed on 2025-06-18  4:28:08
